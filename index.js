@@ -1,22 +1,15 @@
 const dotenv = require('dotenv');
-
-const { Network, Alchemy, Utils } = require('alchemy-sdk');
-
-const settings = {
-    apiKey: process.env.ALCHEMY_KEY,
-    network: Network.ETH_MAINNET,
-};
-
+const Web3 = require('web3');
 const { Client, Events, GatewayIntentBits } = require('discord.js');
 
 dotenv.config();
 
 const client = new Client({
     intents: [
-		GatewayIntentBits.Guilds,
-		GatewayIntentBits.GuildMessages,
-		GatewayIntentBits.MessageContent,
-		GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers,
     ]
 });
 
@@ -32,44 +25,95 @@ client.login(BOT_TOKEN).catch((error) => {
     process.exit(1);
 });
 
-const alchemy = new Alchemy(settings);
+const rpcUrls = {
+    eth: process.env.ETH_RPC_URL,
+    bsc: process.env.BSC_RPC_URL,
+    polygon: process.env.POLYGON_RPC_URL,
+    etho: process.env.ETHO_RPC_URL,
+};
 
-let trackedAddress = '';
+const networks = {
+    eth: 'ETH',
+    bsc: 'BSC',
+    polygon: 'Polygon',
+    etho: 'ETHO Protocol',
+};
 
-alchemy.core
-    .getTokenBalances('0x994b342dd87fc825f66e51ffa3ef71ad818b6893')
-    .then(console.log);
+async function getBalance(chain, address) {
+    try {
+        const web3 = new Web3(rpcUrls[chain]);
+        const balance = await web3.eth.getBalance(address);
+        return web3.utils.fromWei(balance);
+    } catch (error) {
+        console.error(`Error getting ${networks[chain]} balance:`, error.message);
+        throw error;
+    }
+}
 
-const nfts = alchemy.nft.getNftsForOwner("0x994b342dd87fc825f66e51ffa3ef71ad818b6893");
-
+// Store the previous balance for each tracked address
+const previousBalances = {};
 
 async function monitorBlockchain() {
     try {
-        let lastBlockNumber = await alchemy.core.getBlockNumber();
+        const trackedAddresses = {};
+
+        client.on('messageCreate', async (message) => {
+            if (message.author.bot) return;
+
+            const args = message.content.trim().split(/ +/g);
+            const command = args.shift().toLowerCase();
+
+            if (command === '!track') {
+                const chain = args[0];
+                const address = args[1];
+                if (!chain || !address) {
+                    message.channel.send('❗ Please provide a chain (eth, bsc, polygon, etho) and an address. Example: `!track eth 0x742d35Cc6634C0532925a3b844Bc454e4438f44e`');
+                    return;
+                }
+                if (!rpcUrls.hasOwnProperty(chain)) {
+                    message.channel.send('❌ Error: Invalid chain specified.');
+                    return;
+                }
+                trackedAddresses[address] = chain;
+                message.channel.send(`🔎 Now tracking address: ${address} on ${networks[chain]}`);
+                console.log(`Tracking address: ${address} on ${networks[chain]}`);
+            } else if (command === '!balance') {
+                const chain = args[0];
+                const address = args[1];
+                if (!chain || !address) {
+                    message.channel.send('❗ Please provide a chain (eth, bsc, polygon, etho) and an address. Example: `!balance eth 0x742d35Cc6634C0532925a3b844Bc454e4438f44e`');
+                    return;
+                }
+                if (!rpcUrls.hasOwnProperty(chain)) {
+                    message.channel.send('❌ Error: Invalid chain specified.');
+                    return;
+                }
+                try {
+                    const balance = await getBalance(chain, address);
+                    message.channel.send(`💰 Balance for address ${address} on ${networks[chain]}: ${balance} ${chain.toUpperCase()}`);
+                } catch (error) {
+                    console.error('Error getting balance:', error.message);
+                    message.channel.send('❌ Error: Could not fetch the balance. Please make sure the address and chain are correct.');
+                }
+            }
+        });
 
         setInterval(async () => {
             try {
-                const currentBlockNumber = await alchemy.core.getBlockNumber();
+                for (const address of Object.keys(trackedAddresses)) {
+                    const chain = trackedAddresses[address];
+                    try {
+                        const balance = await getBalance(chain, address);
 
-                // Send a message to the channel indicating the bot is checking for transactions
-                if (trackedAddress) {
-                    client.channels.cache.get(CHANNEL_ID).send(`👀 Watching address: ${shortenAddress(trackedAddress)}`);                }
-
-                for (let i = lastBlockNumber + 1; i <= currentBlockNumber; i++) {
-                    const block = await alchemy.core.getBlockWithTransactions(i);
-
-                    for (const transaction of block.transactions) {
-                        if (transaction.to && transaction.to.toLowerCase() === trackedAddress) {
-                            // Sending transaction found
-                            client.channels.cache.get(CHANNEL_ID).send(`💰 Transaction received: ${Utils.formatEther(transaction.value)} ETH\nFrom: ${shortenAddress(transaction.from)}\nTo: ${shortenAddress(transaction.to)}`);
-                        } else if (transaction.from && transaction.from.toLowerCase() === trackedAddress) {
-                            // Receiving transaction found
-                            client.channels.cache.get(CHANNEL_ID).send(`💸 Transaction sent: ${Utils.formatEther(transaction.value)} ETH\nFrom: ${shortenAddress(transaction.from)}\nTo: ${shortenAddress(transaction.to)}`);
+                        // Check if the balance has changed
+                        if (previousBalances[address] !== balance) {
+                            client.channels.cache.get(CHANNEL_ID).send(`💰 Balance update for address ${address} on ${networks[chain]}: ${balance} ${chain.toUpperCase()}`);
+                            previousBalances[address] = balance; // Update the previous balance
                         }
+                    } catch (error) {
+                        console.error('Error getting balance:', error.message);
                     }
                 }
-
-                lastBlockNumber = currentBlockNumber;
             } catch (error) {
                 console.error('❌ Error while monitoring blockchain:', error.message);
             }
@@ -85,8 +129,8 @@ client.on('ready', () => {
     console.log(`Monitoring channel ID: ${CHANNEL_ID}`);
 
     // Send a greeting message to the channel
-    client.channels.cache.get(CHANNEL_ID).send(`🤖 ${client.user.tag}  WalletWatcher is online!`);
-    const greetingMessage = '🎉 Sup bitches. I\'m here to help you track Ethereum wallets and NFTs. Type `!help` to see the available commands.';
+    client.channels.cache.get(CHANNEL_ID).send(`🤖 ${client.user.tag} WalletWatcher is online!`);
+    const greetingMessage = '🎉 Sup bitches. I\'m here to help you track wallets on Ethereum, BSC, Polygon, and ETHO Protocol. Type `!help` to see the available commands.';
     client.channels.cache.get(CHANNEL_ID).send(greetingMessage);
 
     monitorBlockchain();
@@ -98,60 +142,15 @@ client.on('messageCreate', async (message) => {
     const args = message.content.trim().split(/ +/g);
     const command = args.shift().toLowerCase();
 
-    if (command === '!track') {
-        const address = args[0];
-        trackedAddress = address.toLowerCase();
-        message.channel.send(`🔎 Now tracking address: ${trackedAddress}`);
-        console.log(`Tracking address: ${trackedAddress}`);
-    } else if (command === '!balance') {
-        const address = args[0];
-        if (!address) {
-            message.channel.send('❗ Please provide an Ethereum address. Example: `!balance 0x742d35Cc6634C0532925a3b844Bc454e4438f44e`');
-            return;
-        }
-        try {
-            const balance = await alchemy.core.getBalance(address, "latest");
-            message.channel.send(`💰 Balance for address ${shortenAddress(address)}: ${Utils.formatEther(balance)} ETH`);
-        } catch (error) {
-            console.error('Error getting balance:', error.message);
-            message.channel.send('❌ Error: Could not fetch the balance. Please make sure the Ethereum address is correct.');
-        }
-    } else if (command === '!nfts') {
-        const address = args[0];
-        if (!address) {
-            message.channel.send('❗ Please provide an Ethereum address. Example: `!nfts 0x742d35Cc6634C0532925a3b844Bc454e4438f44e`');
-            return;
-        }
-        try {
-            const nfts = await alchemy.nft.getNftsForOwner(address);
-            if (nfts.length === 0) {
-                message.channel.send(`🎨 No NFTs found for address ${shortenAddress(address)}`);
-            } else {
-                let nftMessage = `🎨 NFTs for address ${shortenAddress(address)}:\n`;
-                for (const nft of nfts) {
-                    nftMessage += `- ${nft.name} (Token ID: ${nft.token_id})\n`;
-                }
-                message.channel.send(nftMessage);
-            }
-        } catch (error) {
-            console.error('Error getting NFTs:', error.message);
-            message.channel.send('❌ Error: Could not fetch NFTs. Please make sure the Ethereum address is correct.');
-        }
-    } else if (command === '!help') {
+    if (command === '!help') {
         const helpMessage = `
 📚 **Available Commands:**
 \`\`\`
-!track <address>   - Track an Ethereum address for incoming and outgoing transactions
-!balance <address> - Check the Ether balance of an Ethereum address
-!nfts <address>    - List NFTs owned by an Ethereum address
-!help              - Show this help message
+!track <chain> <address>   - Track an address on a specific chain (eth, bsc, polygon, etho)
+!balance <chain> <address> - Check the balance of an address on a specific chain
+!help                     - Show this help message
 \`\`\`
 `;
         message.channel.send(helpMessage);
     }
 });
-
-function shortenAddress(address) {
-    if (!address) return '';
-    return address.slice(0, 6) + '...' + address.slice(-4);
-}

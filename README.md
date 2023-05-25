@@ -1,23 +1,22 @@
-Wallet Watcher Discord Bot
+Wallet Tracker Discord Bot
 
-Wallet Watcher is a Discord bot that allows you to track Ethereum wallets, check their Ether balances and list the NFTs owned by the wallet. This bot is designed to be easy to set up and deploy in your own environment.
+Wallet Watcher is a Discord bot that allows you to track EVM wallets, check their balances and list the NFTs owned by the wallet. This bot is designed to be easy to set up and deploy in your own environment.
 Prerequisites
 
-    Node.js 14.x or higher
+    Node.js 16.x or higher
     npm (usually bundled with Node.js)
     A Discord bot token
-    An Alchemy API key
 
 Installation
 
     Clone the repository or download the source code:
 
-git clone https://github.com/tchebagual71/WalletWatcher.git
+git clone https://github.com/Exlo84/WalletTracker.git
 ```
 
 Navigate to the project directory:
 
-cd WalletWatcher
+cd WalletTracker
 ```
 
 Install the required dependencies:
@@ -27,10 +26,10 @@ Install the required dependencies:
 
 Configuration
 
-    Create a new file named .env in the project directory and add your Discord bot token and Alchemy API key. Replace <YOUR_DISCORD_BOT_TOKEN> and <YOUR_ALCHEMY_API_KEY> with the respective values:
+    Create a new file named .env in the project directory and add your Discord bot token. 
+    Replace <YOUR_DISCORD_BOT_TOKEN>  with the respective values:
 
 BOT_TOKEN=<YOUR_DISCORD_BOT_TOKEN>
-ALCHEMY_KEY=<YOUR_ALCHEMY_API_KEY>
 ```
 
 (Optional) Configure the channel in which the bot will send wallet tracking notifications. Open the index.js file and change the CHANNEL_ID variable to the desired channel ID. If you don't know how to get the channel ID, you can follow these instructions.
@@ -52,11 +51,11 @@ Usage
 
 The bot has the following commands:
 
-    !track <address>: Track an Ethereum address for incoming and outgoing transactions.
+    !track <chain> <address>: Track an Ethereum address for incoming and outgoing transactions.
 
-    !balance <address>: Check the Ether balance of an Ethereum address.
+    !balance <chain> <address>: Check the  balance of an EVM address.
 
-    !nfts <address>: List NFTs owned by an Ethereum address.
+    !nfts <chain> <address>: List NFTs owned by an Ethereum address.
 
     !help: Show a help message with the available commands.
 
