@@ -95,6 +95,20 @@ async function monitorBlockchain() {
                     console.error('Error getting balance:', error.message);
                     message.channel.send('❌ Error: Could not fetch the balance. Please make sure the address and chain are correct.');
                 }
+            } else if (command === '!untrack') {
+                const address = args[0];
+                if (!address) {
+                    message.channel.send('❗ Please provide an address to untrack. Example: `!untrack 0x742d35Cc6634C0532925a3b844Bc454e4438f44e`');
+                    return;
+                }
+                if (!trackedAddresses.hasOwnProperty(address)) {
+                    message.channel.send('❌ Error: The address is not being tracked.');
+                    return;
+                }
+                delete trackedAddresses[address];
+                delete previousBalances[address];
+                message.channel.send(`🔍 Stopped tracking address: ${address}`);
+                console.log(`Stopped tracking address: ${address}`);
             }
         });
 
@@ -148,7 +162,8 @@ client.on('messageCreate', async (message) => {
 \`\`\`
 !track <chain> <address>   - Track an address on a specific chain (eth, bsc, polygon, etho)
 !balance <chain> <address> - Check the balance of an address on a specific chain
-!help                     - Show this help message
+!untrack <address>         - Stop tracking an address
+!help                      - Show this help message
 \`\`\`
 `;
         message.channel.send(helpMessage);
